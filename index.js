@@ -10,31 +10,43 @@ const isModuleExportsId = (t, node) => t.isMemberExpression(node.object) &&
 const isExports = (t, node) => t.isIdentifier(node.object, { name: 'exports' });
 
 const notRequire = (t, nodePath) => {
-  const [ requireArg, ...rest ] = nodePath.node.arguments;
+  const [requireArg, ...rest] = nodePath.node.arguments;
   return nodePath.node.callee.name !== 'require' ||
     rest.length !== 0 ||
     !t.isStringLiteral(requireArg) ||
     nodePath.scope.hasBinding('require');
 };
 
-const requireVisitor = (t, rootPath) => ({
+const requireVisitor = (index, t, rootPath) => ({
   CallExpression(nodePath) {
     if (notRequire(t, nodePath)) return;
-    const [ requireArg ] = nodePath.node.arguments;
+    const [requireArg] = nodePath.node.arguments;
     const { value: modName } = requireArg;
     const mid = rootPath.scope.generateUidIdentifierBasedOnNode(modName);
     const importDecl = t.importDeclaration(
-      [ t.importDefaultSpecifier(mid) ],
+      [t.importDefaultSpecifier(mid)],
       t.stringLiteral(modName)
     );
     nodePath.replaceWith(mid);
-    rootPath.node.body.unshift(importDecl);
+    rootPath.node.body.splice(index.value, 0, importDecl);
+    index.value++;
   },
 });
 
-module.exports = function({ types: t }) {
+const importVisitor = (index, rootPath) => ({
+  ImportDeclaration(nodePath) {
+    const { node } = nodePath;
+    rootPath.node.body.splice(index, 0, node);
+    index.value++;
+    nodePath.remove();
+  },
+});
+
+module.exports = function ({ types: t }) {
   let commonjs = false;
   let umd = false;
+  const requireIndex = { value: 0 };
+  const importIndex = { value: 0 }
 
   return {
     visitor: {
@@ -59,8 +71,10 @@ module.exports = function({ types: t }) {
         enter(nodePath) {
           commonjs = false;
           umd = false;
+          requireIndex.value = 0;
+          importIndex.value = 0;
           const { body } = nodePath.node;
-          const [ expr ] = body;
+          const [expr] = body;
           if (
             body.length === 1 &&
             t.isExpressionStatement(expr) &&
@@ -68,7 +82,7 @@ module.exports = function({ types: t }) {
             t.isFunctionExpression(expr.expression.callee)
           ) {
             umd = true;
-            for (const [ index, argument ] of expr.expression.arguments.slice().entries()) {
+            for (const [index, argument] of expr.expression.arguments.slice().entries()) {
               if (t.isThisExpression(argument)) {
                 expr.expression.arguments.splice(index, 1, t.identifier('self'));
               }
@@ -86,12 +100,13 @@ module.exports = function({ types: t }) {
               t.variableDeclarator(id, mod),
             ]);
             const wrap = t.expressionStatement(t.callExpression(
-              t.functionExpression(null, [ t.identifier('module'), exportsId ], t.blockStatement(nodePath.node.body)),
-              [ id, t.memberExpression(id, t.identifier('exports')) ]
+              t.functionExpression(null, [t.identifier('module'), exportsId], t.blockStatement(nodePath.node.body)),
+              [id, t.memberExpression(id, t.identifier('exports'))]
             ));
             const final = t.exportDefaultDeclaration(t.memberExpression(id, t.identifier('exports')));
-            nodePath.node.body = [ decl, wrap, final ];
-            nodePath.traverse(requireVisitor(t, nodePath));
+            nodePath.node.body = [decl, wrap, final];
+            nodePath.traverse(requireVisitor(requireIndex, t, nodePath));
+            nodePath.traverse(importVisitor(importIndex, nodePath));
           }
         },
       },
