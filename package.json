@@ -1,6 +1,6 @@
 {
   "name": "@hqjs/babel-plugin-transform-modules",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Transform js files into es modules",
   "main": "index.js",
   "scripts": {
