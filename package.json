@@ -1,7 +1,7 @@
 {
   "name": "@hqjs/babel-plugin-transform-modules",
   "version": "0.0.2",
-  "description": "Transform js files into es modules",
+  "description": "Transform CommonJS into ES modules",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -14,9 +14,11 @@
     "babel",
     "plugin",
     "hq",
-    "modules"
+    "modules",
+    "commonjs",
+    "esmodules"
   ],
-  "author": "hqjs <hqjsorg@gmail.com>",
+  "author": "hqjs <hqjs.org@gmail.com>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/hqjs/babel-plugin-transform-modules/issues"

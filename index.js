@@ -9,6 +9,9 @@ const isModuleExportsId = (t, node) => t.isMemberExpression(node.object) &&
 
 const isExports = (t, node) => t.isIdentifier(node.object, { name: 'exports' });
 
+const isExportDefault = (t, node) => t.isIdentifier(node.object, { name: 'exports' }) &&
+  t.isIdentifier(node.property, { name: 'default' })
+
 const notRequire = (t, nodePath) => {
   const [requireArg, ...rest] = nodePath.node.arguments;
   return nodePath.node.callee.name !== 'require' ||
@@ -22,13 +25,23 @@ const requireVisitor = (index, t, rootPath) => ({
     if (notRequire(t, nodePath)) return;
     const [requireArg] = nodePath.node.arguments;
     const { value: modName } = requireArg;
-    const mid = rootPath.scope.generateUidIdentifierBasedOnNode(modName);
-    const importDecl = t.importDeclaration(
-      [t.importDefaultSpecifier(mid)],
-      t.stringLiteral(modName)
-    );
-    nodePath.replaceWith(mid);
-    rootPath.node.body.splice(index.value, 0, importDecl);
+    const { parent } = nodePath;
+    if (t.isExpressionStatement(parent)) {
+      const importDecl = t.importDeclaration(
+        [],
+        t.stringLiteral(modName)
+      );
+      nodePath.remove();
+      rootPath.node.body.splice(index.value, 0, importDecl);
+    } else {
+      const mid = rootPath.scope.generateUidIdentifierBasedOnNode(modName);
+      const importDecl = t.importDeclaration(
+        [t.importDefaultSpecifier(mid)],
+        t.stringLiteral(modName)
+      );
+      nodePath.replaceWith(mid);
+      rootPath.node.body.splice(index.value, 0, importDecl);
+    }
     index.value++;
   },
 });
@@ -36,7 +49,7 @@ const requireVisitor = (index, t, rootPath) => ({
 const importVisitor = (index, rootPath) => ({
   ImportDeclaration(nodePath) {
     const { node } = nodePath;
-    rootPath.node.body.splice(index, 0, node);
+    rootPath.node.body.splice(index.value, 0, node);
     index.value++;
     nodePath.remove();
   },
@@ -47,12 +60,21 @@ module.exports = function ({ types: t }) {
   let umd = false;
   const requireIndex = { value: 0 };
   const importIndex = { value: 0 }
+  const exports = t.identifier('exports');
+  const moduleExports = t.memberExpression(
+    t.identifier('module'),
+    exports
+  );
+  const objectAssign = t.memberExpression(
+    t.identifier('Object'),
+    t.identifier('assign')
+  );
 
   return {
     visitor: {
       AssignmentExpression(nodePath) {
         if (umd) return;
-        const { left } = nodePath.node;
+        const { left, right } = nodePath.node;
         if (
           t.isMemberExpression(left) && (
             (
@@ -61,7 +83,19 @@ module.exports = function ({ types: t }) {
             ) ||
             (isExports(t, left) && !nodePath.scope.hasBinding('exports'))
           )
-        ) commonjs = true;
+        ) {
+          commonjs = true;
+          if (isExportDefault(t, left)) {
+            nodePath.node.left = moduleExports;
+            nodePath.node.right = t.callExpression(
+              objectAssign,
+              [
+                exports,
+                right
+              ]
+            );
+          }
+        }
       },
       CallExpression(nodePath) {
         if (umd || notRequire(t, nodePath)) return;
