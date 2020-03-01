@@ -20,7 +20,7 @@ const notRequire = (t, nodePath) => {
     nodePath.scope.hasBinding('require');
 };
 
-const requireVisitor = (index, t, rootPath) => ({
+const esVisitor = (index, t, rootPath, {exports, moduleExports, objectAssign}) => ({
   CallExpression(nodePath) {
     if (notRequire(t, nodePath)) return;
     const [requireArg] = nodePath.node.arguments;
@@ -44,22 +44,61 @@ const requireVisitor = (index, t, rootPath) => ({
     }
     index.value++;
   },
-});
-
-const importVisitor = (index, rootPath) => ({
   ImportDeclaration(nodePath) {
     const { node } = nodePath;
     rootPath.node.body.splice(index.value, 0, node);
     index.value++;
     nodePath.remove();
   },
+  ExportNamedDeclaration(nodePath) {
+    const { declaration } = nodePath.node;
+    const [ declarator ] = declaration.declarations;
+    nodePath.replaceWith(t.assignmentExpression(
+      '=',
+      t.memberExpression(exports, declarator.id),
+      declarator.init
+    ));
+  },
+  ExportDefaultDeclaration(nodePath) {
+    if(t.isProgram(nodePath.parent)) return;
+    const { declaration } = nodePath.node;
+    if (
+      t.isExpression(declaration) &&
+      !t.isArrowFunctionExpression(declaration) &&
+      !t.isObjectExpression(declaration) &&
+      !t.isArrayExpression(declaration) &&
+      !t.isNewExpression(declaration)
+    ) {
+      nodePath.replaceWith(t.assignmentExpression(
+        '=',
+        moduleExports,
+        declaration
+      ));
+    } else {
+      const expression = t.isClassDeclaration(declaration) ?
+          t.classExpression(declaration.id, declaration.superClass, declaration.body, declaration.decorators) :
+          t.isFunctionDeclaration(declaration) ?
+            t.functionExpression(declaration.id, declaration.params, declaration.body, declaration.generator, declaration.async) :
+            declaration;
+      nodePath.replaceWith(t.assignmentExpression(
+        '=',
+        moduleExports,
+        t.callExpression(
+          objectAssign,
+          [
+            expression,
+            exports
+          ]
+        )
+      ));
+    }
+  },
 });
 
 module.exports = function ({ types: t }) {
   let commonjs = false;
   let umd = false;
-  const requireIndex = { value: 0 };
-  const importIndex = { value: 0 }
+  const importIndex = { value: 0 };
   const exports = t.identifier('exports');
   const moduleExports = t.memberExpression(
     t.identifier('module'),
@@ -105,7 +144,6 @@ module.exports = function ({ types: t }) {
         enter(nodePath) {
           commonjs = false;
           umd = false;
-          requireIndex.value = 0;
           importIndex.value = 0;
           const { body } = nodePath.node;
           const [expr] = body;
@@ -139,8 +177,7 @@ module.exports = function ({ types: t }) {
             ));
             const final = t.exportDefaultDeclaration(t.memberExpression(id, t.identifier('exports')));
             nodePath.node.body = [decl, wrap, final];
-            nodePath.traverse(requireVisitor(requireIndex, t, nodePath));
-            nodePath.traverse(importVisitor(importIndex, nodePath));
+            nodePath.traverse(esVisitor(importIndex, t, nodePath, {exports, moduleExports, objectAssign}));
           }
         },
       },

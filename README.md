@@ -7,7 +7,7 @@ npm install hqjs@babel-plugin-transform-modules
 ```
 
 # Transformation
-Can recognise UMD files and mixed `import` with `require` statements. Turns dynamic require into static imports. Transforms double `default`.
+Can recognise UMD files and mixed `import`, `export` with `require` statements. Turns dynamic require into static imports. Transforms double `default`.
 
 It will turn
 ```js
@@ -23,6 +23,10 @@ if (process.env.NODE_ENV === 'production') {
 
 import 'w';
 
+export const z = 0;
+
+export default class A {};
+
 exports.q = 1;
 
 exports.default = {t};
@@ -31,10 +35,10 @@ module.exports = {a};
 ```
 into
 ```js
-import "x";
-import _ref2 from "y";
 import a from 'a';
 import b from 'b';
+import "x";
+import _ref2 from "y";
 import 'w';
 const _ref = {
   exports: {}
@@ -47,6 +51,9 @@ const _ref = {
     t = _ref2;
   }
 
+  exports.z = 0;
+  module.exports = Object.assign(class A {}, exports);
+  ;
   exports.q = 1;
   module.exports = Object.assign(exports, {
     t
