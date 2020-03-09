@@ -75,22 +75,29 @@ const esVisitor = (index, t, rootPath, {exports, moduleExports, objectAssign}) =
         declaration
       ));
     } else {
-      const expression = t.isClassDeclaration(declaration) ?
+      if (declaration.id != null) {
+        nodePath.replaceWithMultiple([
+          declaration,
+          t.assignmentExpression(
+            '=',
+            moduleExports,
+            declaration.id
+          )
+        ]);
+      } else {
+        const expression = t.isClassDeclaration(declaration) ?
           t.classExpression(declaration.id, declaration.superClass, declaration.body, declaration.decorators) :
           t.isFunctionDeclaration(declaration) ?
             t.functionExpression(declaration.id, declaration.params, declaration.body, declaration.generator, declaration.async) :
             declaration;
-      nodePath.replaceWith(t.assignmentExpression(
-        '=',
-        moduleExports,
-        t.callExpression(
-          objectAssign,
-          [
-            expression,
-            exports
-          ]
-        )
-      ));
+        nodePath.replaceWith(
+          t.assignmentExpression(
+            '=',
+            moduleExports,
+            expression
+          )
+        );
+      }
     }
   },
 });

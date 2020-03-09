@@ -52,8 +52,10 @@ const _ref = {
   }
 
   exports.z = 0;
-  module.exports = Object.assign(class A {}, exports);
-  ;
+
+  class A {}
+
+  module.exports = A;
   exports.q = 1;
   module.exports = Object.assign(exports, {
     t
