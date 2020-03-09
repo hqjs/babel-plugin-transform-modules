@@ -25,7 +25,7 @@ import 'w';
 
 export const z = 0;
 
-export default class A {};
+export default class A {}
 
 exports.q = 1;
 

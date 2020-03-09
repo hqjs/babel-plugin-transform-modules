@@ -78,11 +78,11 @@ const esVisitor = (index, t, rootPath, {exports, moduleExports, objectAssign}) =
       if (declaration.id != null) {
         nodePath.replaceWithMultiple([
           declaration,
-          t.assignmentExpression(
+          t.expressionStatement(t.assignmentExpression(
             '=',
             moduleExports,
             declaration.id
-          )
+          ))
         ]);
       } else {
         const expression = t.isClassDeclaration(declaration) ?
