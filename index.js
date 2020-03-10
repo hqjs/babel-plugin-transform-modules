@@ -20,7 +20,7 @@ const notRequire = (t, nodePath) => {
     nodePath.scope.hasBinding('require');
 };
 
-const esVisitor = (index, t, rootPath, {exports, moduleExports, objectAssign}) => ({
+const esVisitor = (index, t, rootPath, {exports, moduleExports, objectAssign, latestExport, exportsMap}) => ({
   CallExpression(nodePath) {
     if (notRequire(t, nodePath)) return;
     const [requireArg] = nodePath.node.arguments;
@@ -53,6 +53,10 @@ const esVisitor = (index, t, rootPath, {exports, moduleExports, objectAssign}) =
   ExportNamedDeclaration(nodePath) {
     const { declaration } = nodePath.node;
     const [ declarator ] = declaration.declarations;
+    if (latestExport.start < declaration.start) {
+      latestExport.path = nodePath;
+      latestExport.start = declaration.start;
+    }
     nodePath.replaceWith(t.assignmentExpression(
       '=',
       t.memberExpression(exports, declarator.id),
@@ -76,14 +80,12 @@ const esVisitor = (index, t, rootPath, {exports, moduleExports, objectAssign}) =
       ));
     } else {
       if (declaration.id != null) {
-        nodePath.replaceWithMultiple([
-          declaration,
-          t.expressionStatement(t.assignmentExpression(
+        nodePath.replaceWith(declaration);
+        exportsMap.set(nodePath, t.expressionStatement(t.assignmentExpression(
             '=',
             moduleExports,
-            declaration.id
-          ))
-        ]);
+            t.callExpression(objectAssign, [declaration.id, exports])
+          )));
       } else {
         const expression = t.isClassDeclaration(declaration) ?
           t.classExpression(declaration.id, declaration.superClass, declaration.body, declaration.decorators) :
@@ -105,6 +107,9 @@ const esVisitor = (index, t, rootPath, {exports, moduleExports, objectAssign}) =
 module.exports = function ({ types: t }) {
   let commonjs = false;
   let umd = false;
+  let latestExport = { path: null, start: 0 };
+  const exportsMap = new Map;
+  const moduleExportsMap = new Map;
   const importIndex = { value: 0 };
   const exports = t.identifier('exports');
   const moduleExports = t.memberExpression(
@@ -136,10 +141,16 @@ module.exports = function ({ types: t }) {
             nodePath.node.right = t.callExpression(
               objectAssign,
               [
-                exports,
-                right
+                right,
+                exports
               ]
             );
+            moduleExportsMap.set(nodePath, nodePath.node);
+          } else if (isExports(t, left)) {
+            if (latestExport.start < nodePath.node.start) {
+              latestExport.path = nodePath;
+              latestExport.start = nodePath.node.start;
+            }
           }
         }
       },
@@ -149,6 +160,10 @@ module.exports = function ({ types: t }) {
       },
       Program: {
         enter(nodePath) {
+          latestExport.path = null;
+          latestExport.start = 0;
+          exportsMap.clear();
+          moduleExportsMap.clear()
           commonjs = false;
           umd = false;
           importIndex.value = 0;
@@ -184,7 +199,19 @@ module.exports = function ({ types: t }) {
             ));
             const final = t.exportDefaultDeclaration(t.memberExpression(id, t.identifier('exports')));
             nodePath.node.body = [decl, wrap, final];
-            nodePath.traverse(esVisitor(importIndex, t, nodePath, {exports, moduleExports, objectAssign}));
+            nodePath.traverse(esVisitor(importIndex, t, nodePath, {exports, moduleExports, objectAssign, latestExport, exportsMap}));
+
+            for (const [exportPath, exportAssignment] of exportsMap.entries()) {
+              if (exportPath.node && latestExport.start > exportPath.node.start) {
+                latestExport.path.insertAfter(exportAssignment);
+              } else exportPath.insertAfter(exportAssignment);
+            }
+            for (const [exportPath, exportAssignment] of moduleExportsMap.entries()) {
+              if (latestExport.start > exportAssignment.start) {
+                latestExport.path.insertAfter(exportAssignment);
+                exportPath.remove();
+              }
+            }
           }
         },
       },

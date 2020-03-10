@@ -55,11 +55,11 @@ const _ref = {
 
   class A {}
 
-  module.exports = A;
   exports.q = 1;
-  module.exports = Object.assign(exports, {
+  module.exports = Object.assign(A, exports);
+  module.exports = Object.assign({
     t
-  });
+  }, exports);
   module.exports = {
     a
   };
