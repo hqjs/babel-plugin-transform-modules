@@ -1,6 +1,6 @@
 {
   "name": "@hqjs/babel-plugin-transform-modules",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Transform CommonJS into ES modules",
   "main": "index.js",
   "scripts": {
