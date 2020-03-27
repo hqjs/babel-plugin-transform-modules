@@ -137,6 +137,10 @@ const umdVisitor = (t, index, rootPath) => ({
     const {node} = nodePath;
     if (node.operator !== '=' || !isModuleExports(t, node.left)) return;
     const umdCheck = nodePath.findParent(p => p.isIfStatement());
+    if (!umdCheck) {
+      nodePath.skip();
+      return;
+    }
     const res = {value: null};
     umdCheck.traverse(globalVisitor(t, res));
     if (res.value) {
