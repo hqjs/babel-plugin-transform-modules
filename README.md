@@ -3,7 +3,7 @@ Transform CommonJS modules files into ES modules
 
 # Installation
 ```sh
-npm install hqjs@babel-plugin-transform-modules
+npm install @hqjs/babel-plugin-transform-modules
 ```
 
 # Transformation
